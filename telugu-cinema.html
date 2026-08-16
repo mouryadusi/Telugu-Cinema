@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Telugu Cinema</title>
+<meta name="theme-color" content="#000000">
+<meta name="description" content="An interactive 3D poster universe of Telugu cinema.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+Telugu:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --accent: #b8860b;
+  --ink: #f2ede2;
+  --dim: rgba(242, 237, 226, 0.55);
+  --line: rgba(255, 255, 255, 0.12);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; background: #000; overflow: hidden;
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: var(--ink);
+}
+#canvas-container { position: fixed; inset: 0; }
+body.has-fine-pointer, body.has-fine-pointer * { cursor: none !important; }
+
+/* ---- custom cursor ---- */
+#cursor-dot, #cursor-ring {
+  position: fixed; top: 0; left: 0; pointer-events: none; z-index: 90;
+  border-radius: 50%; transform: translate(-50%, -50%);
+  transition: width .15s ease, height .15s ease, border-color .15s ease, opacity .15s ease;
+}
+#cursor-dot { width: 5px; height: 5px; background: var(--ink); opacity: .9; }
+#cursor-ring {
+  width: 22px; height: 22px; border: 1px solid rgba(242,237,226,0.5);
+  display: flex; align-items: center; justify-content: center;
+}
+#cursor-ring.hover { width: 46px; height: 46px; border-color: var(--accent); }
+#cursor-ring .view-label {
+  font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .08em;
+  color: var(--accent); opacity: 0; transition: opacity .15s ease;
+}
+#cursor-ring.hover .view-label { opacity: 1; }
+body.touch-device #cursor-dot, body.touch-device #cursor-ring { display: none; }
+
+/* ---- minimal chrome ---- */
+.chrome { position: fixed; z-index: 20; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+#brand { top: 22px; left: 24px; }
+#brand .en { color: var(--ink); }
+#brand .te { color: var(--dim); font-family: 'Noto Sans Telugu', sans-serif; text-transform: none; letter-spacing: 0; margin-left: 8px; font-size: 12px; }
+#settings-toggle { top: 22px; right: 24px; background: none; border: none; color: var(--ink); cursor: pointer; font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 4px; }
+#settings-toggle:hover { color: var(--accent); }
+
+#zone-label { bottom: 26px; left: 24px; max-width: 60vw; }
+#zone-label .name { color: var(--ink); transition: opacity .35s ease; }
+#zone-label .te { display: block; color: var(--dim); font-family: 'Noto Sans Telugu', sans-serif; text-transform: none; letter-spacing: 0; font-size: 12px; margin-top: 4px; }
+
+#explore-hint { bottom: 26px; right: 24px; color: var(--dim); transition: opacity .6s ease; }
+#explore-hint.hidden { opacity: 0; pointer-events: none; }
+
+/* ---- settings panel ---- */
+#settings-panel {
+  position: fixed; top: 56px; right: 24px; z-index: 25; width: 220px;
+  background: rgba(10,10,10,0.92); border: 1px solid var(--line); padding: 16px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; display: none;
+}
+#settings-panel.open { display: block; }
+#settings-panel h4 { margin: 0 0 10px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 400; }
+#settings-panel .row { display: flex; gap: 6px; margin-bottom: 14px; }
+#settings-panel button.opt {
+  flex: 1; background: none; border: 1px solid var(--line); color: var(--dim);
+  padding: 6px 4px; font: inherit; cursor: pointer; letter-spacing: .05em;
+}
+#settings-panel button.opt.active { color: var(--ink); border-color: var(--accent); }
+#settings-panel label.toggle { display: flex; align-items: center; gap: 8px; color: var(--dim); cursor: pointer; }
+
+/* ---- floating focus caption (near hovered poster) ---- */
+#focus-info {
+  position: fixed; z-index: 15; pointer-events: none; transform: translate(-50%, -130%);
+  text-align: center; opacity: 0; transition: opacity .25s ease;
+  font-family: 'Fraunces', serif;
+}
+#focus-info.visible { opacity: 1; }
+#focus-info .t { font-size: 15px; letter-spacing: .01em; }
+#focus-info .m { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; margin-top: 2px; }
+
+/* ---- loader ---- */
+#loader {
+  position: fixed; inset: 0; z-index: 100; background: #000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: opacity .7s ease;
+}
+#loader.fade-out { opacity: 0; pointer-events: none; }
+#loader .title { font-family: 'Fraunces', serif; font-size: clamp(28px, 5vw, 48px); letter-spacing: .02em; }
+#loader .status { margin-top: 18px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); min-height: 16px; }
+#loader .bar { width: 220px; height: 1px; background: var(--line); margin-top: 20px; position: relative; overflow: hidden; }
+#loader .bar-fill { position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: var(--accent); transition: width .2s ease; }
+
+/* ---- detail overlay ---- */
+#scrim { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; transition: opacity .5s ease; }
+#scrim.open { opacity: 1; pointer-events: auto; }
+
+#detail {
+  position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end;
+  padding: 6vh 8vw; pointer-events: none; opacity: 0; transition: opacity .5s ease .1s;
+}
+#detail.open { opacity: 1; pointer-events: auto; }
+#detail .panel { max-width: 520px; }
+#detail .back { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; background: none; border: none; color: var(--dim); cursor: pointer; padding: 10px 12px; margin: -10px -12px 8px -12px; }
+#detail .back:hover { color: var(--accent); }
+#detail h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: clamp(26px, 4vw, 44px); margin: 0 0 6px; line-height: 1.05; }
+#detail .meta { font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: .06em; color: var(--accent); text-transform: uppercase; margin-bottom: 16px; }
+#detail .desc { font-size: 15px; line-height: 1.6; color: rgba(242,237,226,0.85); max-width: 46ch; margin-bottom: 22px; }
+#detail .related { display: flex; gap: 10px; flex-wrap: wrap; }
+#detail .related span { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--dim); border: 1px solid var(--line); padding: 5px 10px; }
+
+@media (max-width: 720px) {
+  .chrome { font-size: 9.5px; }
+  #detail { padding: 5vh 6vw; }
+  #settings-panel { width: 180px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #loader, #scrim, #detail, #focus-info, #zone-label .name { transition-duration: .05s; }
+}
+
+</style>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+
+  <div id="cursor-dot"></div>
+  <div id="cursor-ring"><span class="view-label">VIEW</span></div>
+
+  <div id="brand" class="chrome"><span class="en">Telugu Cinema</span><span class="te">తెలుగు సినిమా</span></div>
+  <button id="settings-toggle" class="chrome" type="button" aria-expanded="false">Settings</button>
+  <div id="zone-label" class="chrome" aria-live="polite">
+    <span class="name">Pawan Kalyan</span>
+    <span class="te"></span>
+  </div>
+  <div id="explore-hint" class="chrome">Move · Drag · Click a poster</div>
+
+  <div id="settings-panel">
+    <h4>Motion</h4>
+    <div class="row">
+      <button type="button" class="opt active" data-motion="auto">Auto</button>
+      <button type="button" class="opt" data-motion="calm">Calm</button>
+    </div>
+    <h4>Cursor</h4>
+    <div class="row">
+      <button type="button" class="opt active" data-cursor="on">On</button>
+      <button type="button" class="opt" data-cursor="off">Off</button>
+    </div>
+  </div>
+
+  <div id="focus-info">
+    <div class="t"></div>
+    <div class="m"></div>
+  </div>
+
+  <div id="loader">
+    <div class="title">TELUGU CINEMA</div>
+    <div class="status" id="loader-status">Assembling the archive…</div>
+    <div class="bar"><div class="bar-fill" id="loader-bar"></div></div>
+  </div>
+
+  <div id="scrim"></div>
+  <div id="detail">
+    <div class="panel">
+      <button type="button" class="back">← Back to the universe</button>
+      <h2 id="detail-title"></h2>
+      <div class="meta" id="detail-meta"></div>
+      <div class="desc" id="detail-desc"></div>
+      <div class="related" id="detail-related"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script>
+/* Telugu Cinema — data.
+   Real, curated film entries (title/year/genre) grouped by the requested
+   ranking order. Years and titles are drawn from general knowledge and,
+   for the two trickiest filmographies (Siddharth's Telugu-specific work,
+   and Sandeep Reddy Vanga's Telugu-language directing credits), verified
+   against current sources before writing this file — see README.md
+   "Data honesty" for what that means and its limits. Telugu-script name
+   labels are a tasteful accent, not a verified linguistic reference —
+   see README.md. */
+window.TC = window.TC || {};
+
+(function () {
+  const RANKINGS = [
+    { id: 1, key: "pawan-kalyan", name: "Pawan Kalyan", telugu: "పవన్ కళ్యాణ్", type: "actor", accent: "#c0392b" },
+    { id: 2, key: "chiranjeevi", name: "Chiranjeevi", telugu: "చిరంజీవి", type: "actor", accent: "#b8860b" },
+    { id: 3, key: "ram-charan", name: "Ram Charan", telugu: "రామ్ చరణ్", type: "actor", accent: "#1b4f72" },
+    { id: 4, key: "siddharth", name: "Siddharth", telugu: "సిద్ధార్థ్", type: "actor", accent: "#6c3483" },
+    { id: 5, key: "mahesh-babu", name: "Mahesh Babu", telugu: "మహేష్ బాబు", type: "actor", accent: "#117864" },
+    { id: 6, key: "allu-arjun", name: "Allu Arjun", telugu: "అల్లు అర్జున్", type: "actor", accent: "#a04000" },
+    { id: 7, key: "nagarjuna", name: "Nagarjuna", telugu: "నాగార్జున", type: "actor", accent: "#283747" },
+    { id: 8, key: "balakrishna", name: "Balakrishna", telugu: "బాలకృష్ణ", type: "actor", accent: "#7d6608" },
+    { id: 9, key: "venkatesh", name: "Venkatesh", telugu: "వెంకటేష్", type: "actor", accent: "#922b21" },
+    { id: 10, key: "ravi-teja", name: "Ravi Teja", telugu: "రవితేజ", type: "actor", accent: "#145a32" },
+    { id: 11, key: "nani", name: "Nani", telugu: "నాని", type: "actor", accent: "#1a5276" },
+    { id: 12, key: "rgv", name: "RGV", telugu: "రామ్ గోపాల్ వర్మ", type: "director", accent: "#4a235a" },
+    { id: 13, key: "srv", name: "Sandeep Reddy Vanga", telugu: "సందీప్ రెడ్డి వంగా", type: "director", accent: "#641e16" },
+    { id: 14, key: "ntr-jr", name: "NTR Jr", telugu: "జూనియర్ ఎన్టీఆర్", type: "actor", accent: "#b7950b" },
+    { id: 15, key: "rest", name: "The Rest of Telugu Cinema", telugu: null, type: "collection", accent: "#5d6d7e" },
+    // Tiers 16–22: after the 15 requested zones, the remaining space is
+    // organized by general reputation rather than by person. This is a
+    // curatorial judgment call, not certified box-office data — see
+    // README.md "Tier zones" for what that means and its limits.
+    { id: 16, key: "industry-hits", name: "Industry Hits", telugu: null, type: "field", accent: "#9b2226" },
+    { id: 17, key: "blockbusters", name: "Blockbusters", telugu: null, type: "field", accent: "#bb4d00" },
+    { id: 18, key: "super-hits", name: "Super Hits", telugu: null, type: "field", accent: "#2a6f77" },
+    { id: 19, key: "hits", name: "Hits", telugu: null, type: "field", accent: "#3d5a80" },
+    { id: 20, key: "averages", name: "Averages", telugu: null, type: "field", accent: "#6b6b6b" },
+    { id: 21, key: "cult-classics", name: "Cult Classics", telugu: null, type: "field", accent: "#5e3a87" },
+    { id: 22, key: "award-winning", name: "Award-Winning", telugu: null, type: "field", accent: "#a67c00" }
+  ];
+
+  // [title, year, genre]
+  const FILM_GROUPS = {
+    "pawan-kalyan": [
+      ["Akkada Ammayi Ikkada Abbayi", 1997, "Comedy"], ["Tholi Prema", 1998, "Romance"],
+      ["Suswagatham", 1998, "Family"], ["Thammudu", 1999, "Family"], ["Badri", 2000, "Action"],
+      ["Kushi", 2001, "Romance"], ["Johnny", 2003, "Action"], ["Gudumba Shankar", 2004, "Comedy"],
+      ["Balu", 2005, "Action"], ["Annavaram", 2006, "Action"], ["Jalsa", 2008, "Action"],
+      ["Katamarayudu", 2017, "Action"],
+      ["Gabbar Singh", 2012, "Action"], ["Attarintiki Daredi", 2013, "Family"],
+      ["Gopala Gopala", 2015, "Comedy"],
+      ["Sardaar Gabbar Singh", 2016, "Action"], ["Agnyaathavaasi", 2018, "Action"],
+      ["Vakeel Saab", 2021, "Drama"], ["Bheemla Nayak", 2022, "Action"], ["Bro", 2023, "Comedy"],
+      ["Hari Hara Veera Mallu: Part 1", 2025, "Action"], ["OG", 2025, "Action"]
+    ],
+    chiranjeevi: [
+      ["Khaidi", 1983, "Action"], ["Challenge", 1984, "Action"], ["Vijetha", 1985, "Drama"],
+      ["Swayam Krushi", 1987, "Drama"], ["Rudraveena", 1988, "Drama"],
+      ["Jagadeka Veerudu Athiloka Sundari", 1990, "Family"], ["Gharana Mogudu", 1992, "Comedy"],
+      ["Aapadbandhavudu", 1992, "Drama"], ["Mutha Mestri", 1993, "Action"],
+      ["Alluda Majaka", 1995, "Comedy"], ["Master", 1997, "Action"], ["Indra", 2002, "Action"],
+      ["Tagore", 2003, "Drama"], ["Shankar Dada M.B.B.S.", 2004, "Comedy"], ["Stalin", 2006, "Action"],
+      ["Khaidi No. 150", 2017, "Action"], ["Sye Raa Narasimha Reddy", 2019, "Drama"],
+      ["Waltair Veerayya", 2023, "Action"], ["Bholaa Shankar", 2023, "Action"], ["God Father", 2022, "Action"],
+      ["Vishwambhara", 2025, "Action"]
+    ],
+    "ram-charan": [
+      ["Chirutha", 2007, "Action"], ["Magadheera", 2009, "Action"], ["Orange", 2010, "Romance"],
+      ["Racha", 2012, "Action"], ["Naayak", 2013, "Action"], ["Zanjeer", 2013, "Action"],
+      ["Yevadu", 2014, "Action"], ["Bruce Lee: The Fighter", 2015, "Action"],
+      ["Dhruva", 2016, "Thriller"], ["Rangasthalam", 2018, "Drama"], ["Vinaya Vidheya Rama", 2019, "Action"],
+      ["RRR", 2022, "Action"], ["Game Changer", 2025, "Action"]
+    ],
+    siddharth: [
+      ["Chukkallo Chandrudu", 2005, "Romance"], ["Nuvvostanante Nenoddantana", 2005, "Romance"],
+      ["Bommarillu", 2006, "Family"], ["Konchem Ishtam Konchem Kashtam", 2009, "Romance"],
+      ["Prasthanam", 2010, "Drama"], ["Jill", 2011, "Thriller"], ["Oh My Friend", 2011, "Romance"],
+      ["Oh! Baby", 2019, "Comedy"]
+    ],
+    "mahesh-babu": [
+      ["Vamsi", 1999, "Action"], ["Yuvaraju", 2000, "Family"],
+      ["Okkadu", 2003, "Action"], ["Athadu", 2005, "Action"], ["Pokiri", 2006, "Action"],
+      ["Dookudu", 2011, "Action"], ["Businessman", 2012, "Action"], ["1: Nenokkadine", 2014, "Thriller"],
+      ["Seethamma Vakitlo Sirimalle Chettu", 2013, "Family"], ["Khaleja", 2010, "Action"],
+      ["Srimanthudu", 2015, "Drama"], ["Spyder", 2017, "Thriller"],
+      ["Bharat Ane Nenu", 2018, "Drama"], ["Maharshi", 2019, "Drama"],
+      ["Sarileru Neekevvaru", 2020, "Action"], ["Sarkaru Vaari Paata", 2022, "Action"],
+      ["Guntur Kaaram", 2024, "Action"]
+    ],
+    "allu-arjun": [
+      ["Gangotri", 2003, "Action"], ["Arya", 2004, "Romance"], ["Bunny", 2005, "Romance"], ["Happy", 2006, "Romance"],
+      ["Desamuduru", 2007, "Action"], ["Parugu", 2008, "Romance"], ["Arya 2", 2009, "Romance"],
+      ["Vedam", 2010, "Drama"], ["Julayi", 2012, "Action"], ["Iddarammayilatho", 2013, "Romance"],
+      ["Race Gurram", 2014, "Action"], ["S/O Satyamurthy", 2015, "Family"],
+      ["Sarrainodu", 2016, "Action"], ["DJ Duvvada Jagannadham", 2017, "Action"],
+      ["Ala Vaikunthapurramuloo", 2020, "Family"], ["Pushpa: The Rise", 2021, "Action"],
+      ["Pushpa 2: The Rule", 2024, "Action"]
+    ],
+    nagarjuna: [
+      ["Shiva", 1989, "Action"], ["Geetanjali", 1989, "Romance"], ["Ninne Pelladata", 1996, "Romance"],
+      ["Annamayya", 1997, "Drama"], ["Manmadhudu", 2002, "Romance"], ["Officer", 2001, "Action"],
+      ["King", 2008, "Action"], ["Manam", 2014, "Drama"], ["Soggade Chinni Nayana", 2016, "Comedy"],
+      ["Om Namo Venkatesaya", 2017, "Drama"], ["Devadas", 2018, "Romance"], ["Manmadhudu 2", 2019, "Romance"],
+      ["Wild Dog", 2021, "Thriller"], ["The Ghost", 2022, "Action"], ["Bangarraju", 2022, "Comedy"]
+    ],
+    balakrishna: [
+      ["Aditya 369", 1991, "Family"], ["Samarasimha Reddy", 1999, "Action"],
+      ["Narasimha Naidu", 2001, "Action"], ["Lakshmi Narasimha", 2004, "Action"],
+      ["Sri Krishnarjuna Vijayam", 1996, "Fantasy"], ["Simha", 2010, "Action"],
+      ["Ruler", 2015, "Action"], ["Legend", 2014, "Action"], ["Gautamiputra Satakarni", 2017, "Drama"],
+      ["Jai Simha", 2018, "Action"], ["NTR Kathanayakudu", 2019, "Drama"], ["Akhanda", 2021, "Action"],
+      ["Veera Simha Reddy", 2023, "Action"], ["Bhagavanth Kesari", 2023, "Action"]
+    ],
+    venkatesh: [
+      ["Bobbili Raja", 1990, "Action"], ["Subhalagnam", 1994, "Family"],
+      ["Preminchukundam Raa", 1997, "Romance"], ["Preminchu", 2001, "Romance"],
+      ["Nuvvu Naaku Nachav", 2001, "Romance"], ["Malliswari", 2004, "Family"],
+      ["Sankranti", 2005, "Family"], ["Namo Venkatesa", 2010, "Comedy"], ["Drushyam", 2014, "Thriller"],
+      ["Guru", 2017, "Drama"], ["F2: Fun and Frustration", 2019, "Comedy"],
+      ["Venky Mama", 2019, "Family"], ["Drishyam 2", 2021, "Thriller"], ["Saindhav", 2024, "Action"],
+      ["Sankranthiki Vasthunnam", 2025, "Family"]
+    ],
+    "ravi-teja": [
+      ["Idiot", 2002, "Comedy"], ["Khadgam", 2002, "Action"], ["Neninthe", 2008, "Action"],
+      ["Vikramarkudu", 2006, "Action"], ["Dubai Seenu", 2007, "Comedy"], ["Kick", 2009, "Action"],
+      ["Don Seenu", 2010, "Action"], ["Balupu", 2013, "Comedy"], ["Kick 2", 2015, "Action"],
+      ["Nela Ticket", 2018, "Family"], ["Krack", 2021, "Action"], ["Dhamaka", 2022, "Comedy"],
+      ["Sarocharu", 2012, "Action"], ["Amar Akbar Anthony", 2018, "Comedy"],
+      ["Waltair Veerayya", 2023, "Action"]
+    ],
+    nani: [
+      ["Ashta Chamma", 2008, "Comedy"], ["Ala Modalaindi", 2011, "Romance"], ["Eega", 2012, "Thriller"],
+      ["Bhale Bhale Magadivoy", 2015, "Comedy"], ["Krishna Gaadi Veera Prema Gaadha", 2016, "Romance"],
+      ["Gentleman", 2016, "Romance"], ["MCA", 2017, "Comedy"], ["Ninnu Kori", 2017, "Romance"],
+      ["Devadas", 2018, "Romance"], ["Jersey", 2019, "Drama"],
+      ["Gang Leader", 2019, "Action"], ["V", 2020, "Thriller"], ["Shyam Singha Roy", 2021, "Drama"],
+      ["Ante Sundaraniki", 2022, "Romance"], ["Dasara", 2023, "Drama"], ["Hi Nanna", 2023, "Drama"],
+      ["Saripodhaa Sanivaaram", 2024, "Action"]
+    ],
+    rgv: [
+      ["Shiva", 1989, "Action"], ["Kshana Kshanam", 1991, "Thriller"], ["Govinda Govinda", 1994, "Action"],
+      ["Anaganaga Oka Roju", 1997, "Drama"], ["Prema Katha", 1999, "Romance"],
+      ["Naa Autograph", 2004, "Romance"], ["Rakta Charitra", 2010, "Action"]
+    ],
+    srv: [
+      ["Arjun Reddy", 2017, "Drama"], ["Spirit", 2027, "Action", { upcoming: true }]
+    ],
+    "ntr-jr": [
+      ["Ninnu Choodalani", 2001, "Romance"], ["Aadi", 2002, "Action"], ["Simhadri", 2003, "Action"],
+      ["Yamadonga", 2007, "Family"], ["Kantri", 2008, "Action"], ["Adhurs", 2010, "Comedy"], ["Baadshah", 2013, "Action"],
+      ["Temper", 2015, "Action"], ["Nannaku Prematho", 2016, "Drama"],
+      ["Janatha Garage", 2016, "Action"], ["Jai Lava Kusa", 2017, "Family"],
+      ["Aravinda Sametha Veera Raghava", 2018, "Drama"], ["RRR", 2022, "Action"], ["Devara: Part 1", 2024, "Action"]
+    ],
+    rest: [
+      ["Pathala Bhairavi", 1951, "Classic"], ["Devadasu", 1953, "Classic"], ["Missamma", 1955, "Classic"],
+      ["Mayabazar", 1957, "Classic"], ["Lava Kusa", 1963, "Classic"], ["Maro Charitra", 1978, "Romance"],
+      ["Sagara Sangamam", 1983, "Musical"], ["Sankarabharanam", 1980, "Musical"], ["Sitara", 1984, "Drama"], ["Padamati Sandhya Ragam", 1986, "Romance"],
+      ["Swathi Muthyam", 1986, "Family"], ["April 1 Vidudala", 1991, "Drama"],
+      ["Swati Kiranam", 1992, "Musical"], ["Sye", 2004, "Action"], ["Life Is Beautiful", 2012, "Drama"],
+      ["Middle Class Melodies", 2020, "Family"], ["Liger", 2022, "Action"], ["Radhe Shyam", 2022, "Romance"],
+      ["Major", 2022, "Action"], ["Bimbisara", 2022, "Fantasy"], ["Virupaksha", 2023, "Thriller"],
+      ["Kushi", 2023, "Romance"], ["Family Star", 2024, "Family"], ["Mallesham", 2019, "Drama"]
+    ],
+    // Tiers 16–22 — reputation-based, not certified box-office data. Some
+    // entries are moved out of "rest" into their better-fitting tier;
+    // some are new titles added directly. See README.md "Tier zones".
+    "industry-hits": [
+      ["Baahubali: The Beginning", 2015, "Action"], ["Baahubali 2: The Conclusion", 2017, "Action"],
+      ["Kalki 2898 AD", 2024, "Action"], ["Salaar: Part 1 - Ceasefire", 2023, "Action"], ["Saaho", 2019, "Action"]
+    ],
+    blockbusters: [
+      ["Geetha Govindam", 2018, "Romance"], ["Fidaa", 2017, "Romance"], ["DJ Tillu", 2022, "Comedy"],
+      ["Sita Ramam", 2022, "Romance"], ["Karthikeya 2", 2022, "Thriller"], ["Hanu-Man", 2024, "Action"],
+      ["Lucky Baskhar", 2024, "Drama"], ["Uppena", 2021, "Romance"], ["Tillu Square", 2024, "Comedy"],
+      ["100% Love", 2011, "Romance"], ["Ye Maaya Chesave", 2010, "Romance"],
+      ["Chalo", 2018, "Romance"], ["Ninnila Ninnila", 2021, "Romance"]
+    ],
+    "super-hits": [
+      ["Baby", 2023, "Romance"], ["Dear Comrade", 2019, "Romance"], ["Jathi Ratnalu", 2021, "Comedy"],
+      ["Vaathi", 2023, "Drama"], ["Virata Parvam", 2022, "Drama"], ["Most Eligible Bachelor", 2021, "Romance"],
+      ["Bheeshma", 2020, "Romance"], ["Mirchi", 2013, "Action"], ["Billa", 2009, "Action"],
+      ["Prema Desam", 1996, "Romance"]
+    ],
+    hits: [
+      ["Godavari", 2006, "Romance"], ["Anand", 2004, "Romance"], ["Vennela", 2002, "Romance"],
+      ["Nuvvu Nenu", 2001, "Romance"], ["Manasantha Nuvve", 2001, "Romance"], ["Happy Days", 2007, "Family"],
+      ["Bommalata", 2006, "Family"], ["Guntur Talkies", 2016, "Comedy"], ["Rang De", 2021, "Romance"],
+      ["Check", 2021, "Thriller"], ["Yevade Subramanyam", 2015, "Drama"], ["Chatrapathi", 2005, "Action"],
+      ["Pournami", 2006, "Romance"], ["Darling", 2010, "Romance"], ["Seema Tapakai", 2011, "Comedy"]
+    ],
+    averages: [
+      ["World Famous Lover", 2020, "Romance"], ["Nuvve Kavali", 2000, "Romance"], ["Aithe", 2003, "Thriller"],
+      ["Colour Photo", 2020, "Drama"], ["Custody", 2023, "Action"]
+    ],
+    "cult-classics": [
+      ["Awe!", 2018, "Thriller"], ["Agent Sai Srinivasa Athreya", 2019, "Thriller"],
+      ["C/o Kancharapalem", 2018, "Drama"], ["HIT: The First Case", 2020, "Thriller"],
+      ["Uma Maheswara Ugra Roopasya", 2020, "Comedy"]
+    ],
+    "award-winning": [
+      ["Pelli Choopulu", 2016, "Romance"], ["Mahanati", 2018, "Drama"], ["Balagam", 2023, "Drama"]
+    ]
+  };
+
+  const GENRE_BASE = {
+    Action: "#7a1f1f", Drama: "#26415a", Romance: "#7a2f4a", Comedy: "#8a6a1f",
+    Thriller: "#173a24", Family: "#6a4a26", Classic: "#8a7020", Musical: "#1f5a52",
+    Fantasy: "#4a235a"
+  };
+
+  const rankingByKey = {};
+  RANKINGS.forEach(r => (rankingByKey[r.key] = r));
+
+  const FILMS = [];
+  Object.keys(FILM_GROUPS).forEach(key => {
+    const ranking = rankingByKey[key];
+    FILM_GROUPS[key].forEach(([title, year, genre, flags]) => {
+      const isPersonZone = ranking.type === "actor" || ranking.type === "director";
+      FILMS.push({
+        title, year, genre,
+        era: Math.floor(year / 10) * 10,
+        rankId: ranking.id,
+        person: isPersonZone ? ranking.name : null,
+        personType: isPersonZone ? ranking.type : null,
+        real: true,
+        upcoming: !!(flags && flags.upcoming),
+        genreColor: GENRE_BASE[genre] || "#333333"
+      });
+    });
+  });
+
+  window.TC.RANKINGS = RANKINGS;
+  window.TC.FILMS = FILMS;
+  window.TC.GENRE_BASE = GENRE_BASE;
+})();
+
+  </script>
+  <script>
+/* Spatial layout — turns RANKINGS + FILMS into 3D nodes on a sphere.
+   Pure math, no Three.js dependency, so it can be unit-tested in Node.
+   See README.md "How the sphere is built" for the reasoning. */
+window.TC = window.TC || {};
+
+(function () {
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
+  // Kept for external/legacy use (a whole-sphere spiral); buildLayout
+  // below no longer uses this directly — see the per-wedge generator,
+  // which guarantees exact counts per ranking instead of filtering a
+  // global spiral by azimuth (that approach could statistically drop or
+  // duplicate a point or two right at a wedge boundary — fixed here so
+  // every real film is guaranteed a place).
+  function fibonacciSpherePoints(n, radius) {
+    const points = [];
+    for (let i = 0; i < n; i++) {
+      const yNorm = n === 1 ? 0 : 1 - (i / (n - 1)) * 2; // 1..-1
+      const r = Math.sqrt(Math.max(0, 1 - yNorm * yNorm));
+      const theta = GOLDEN_ANGLE * i;
+      const x = Math.cos(theta) * r;
+      const z = Math.sin(theta) * r;
+      const azimuth = (Math.atan2(z, x) + Math.PI * 2) % (Math.PI * 2);
+      points.push({ x: x * radius, y: yNorm * radius, z: z * radius, azimuth, yNorm });
+    }
+    return points;
+  }
+
+  // Points generated directly within one wedge's azimuth range, still
+  // using the golden angle (mod the wedge's own span) for an organic,
+  // non-grid spread — but this way every wedge gets exactly the count it
+  // asked for, by construction, so no film is ever silently dropped and
+  // no wedge ever gets a stray extra "filler" node it wasn't assigned.
+  function pointsInWedge(count, start, span, radius) {
+    const pts = [];
+    for (let j = 0; j < count; j++) {
+      const yNorm = count === 1 ? 0 : 1 - (j / (count - 1)) * 2;
+      const r = Math.sqrt(Math.max(0, 1 - yNorm * yNorm));
+      const frac = ((j * GOLDEN_ANGLE) % (Math.PI * 2)) / (Math.PI * 2); // 0..1
+      const azimuth = start + frac * span;
+      const x = Math.cos(azimuth) * r, z = Math.sin(azimuth) * r;
+      pts.push({ x: x * radius, y: yNorm * radius, z: z * radius, azimuth, yNorm });
+    }
+    return pts;
+  }
+
+  // Build the full node list: each ranking gets a contiguous azimuthal
+  // wedge sized by how many nodes (real + filler) it holds, so "which
+  // wedge is the camera looking at" and "which wedge holds this ranking"
+  // are the same coordinate system — see js/scene.js activeZoneForAngle.
+  function buildLayout(opts) {
+    const { rankings, films, radius, fillerTotal, restBoostFactor } = opts;
+
+    const byRank = {};
+    rankings.forEach(r => (byRank[r.id] = { ranking: r, films: [] }));
+    films.forEach(f => byRank[f.rankId].films.push(f));
+
+    const weights = rankings.map(r => {
+      const base = Math.max(1, byRank[r.id].films.length);
+      return r.key === "rest" ? base * restBoostFactor : base;
+    });
+    const weightSum = weights.reduce((a, b) => a + b, 0);
+
+    const fillerCounts = rankings.map((r, i) => Math.round((fillerTotal * weights[i]) / weightSum));
+    const nodeCounts = rankings.map((r, i) => byRank[r.id].films.length + fillerCounts[i]);
+    const totalNodes = nodeCounts.reduce((a, b) => a + b, 0);
+
+    // wedge boundaries proportional to each ranking's node count
+    const wedges = [];
+    let cursor = 0;
+    nodeCounts.forEach((count, i) => {
+      const start = (cursor / totalNodes) * Math.PI * 2;
+      cursor += count;
+      const end = (cursor / totalNodes) * Math.PI * 2;
+      wedges.push({ rankId: rankings[i].id, start, end, count });
+    });
+
+    const nodes = [];
+    wedges.forEach(wedge => {
+      const span = wedge.end - wedge.start;
+      const filmsForRank = byRank[wedge.rankId].films.slice();
+      const pts = pointsInWedge(wedge.count, wedge.start, span, radius);
+
+      // prefer points near the wedge's horizontal middle + the equator for
+      // real films, so labeled titles are more likely to be near the
+      // default view
+      const midAzimuth = wedge.start + span / 2;
+      const sorted = pts.slice().sort((a, b) => {
+        const da = Math.abs(a.azimuth - midAzimuth) + Math.abs(a.yNorm) * 0.6;
+        const db = Math.abs(b.azimuth - midAzimuth) + Math.abs(b.yNorm) * 0.6;
+        return da - db;
+      });
+      sorted.forEach((p, i) => {
+        const film = i < filmsForRank.length ? filmsForRank[i] : null;
+        nodes.push({
+          position: p, rankId: wedge.rankId,
+          kind: film ? "film" : "filler",
+          film
+        });
+      });
+    });
+
+    return { nodes, wedges };
+  }
+
+  window.TC.fibonacciSpherePoints = fibonacciSpherePoints;
+  window.TC.buildLayout = buildLayout;
+})();
+
+  </script>
+  <script>
+/* Procedural poster textures. No real poster artwork is fetched or used —
+   every "poster" here is generated on a canvas from the film's title,
+   year, and a color derived from its ranking's accent + genre, dressed up
+   with original abstract motifs, a generic hero-silhouette shape, a
+   spotlight glow, a vignette, and film grain so it reads as a real poster
+   composition rather than a flat color swatch. This is a deliberate
+   choice, not a placeholder-for-now: real poster art (and any specific
+   actor's likeness) is off-limits, and reproducing it at scale isn't
+   something this build does. The silhouette below is a generic rounded
+   bust shape — no facial features, no specific person, just the kind of
+   anonymous hero silhouette common in minimalist poster design. See
+   README.md "Why no real poster images." */
+window.TC = window.TC || {};
+
+(function () {
+  const cache = new Map();
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.replace("#", ""), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function mix(a, b, t) {
+    return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
+  }
+  function rgbStr(c, a) { return `rgba(${c.r | 0},${c.g | 0},${c.b | 0},${a})`; }
+
+  // deterministic pseudo-random from a string, so the same film always
+  // gets the same generated motif instead of reshuffling on every render
+  function seedFrom(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) / 4294967295); }
+  }
+
+  function wrapText(ctx, text, maxWidth) {
+    const words = text.split(" ");
+    const lines = [];
+    let line = "";
+    words.forEach(w => {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = w; }
+      else line = test;
+    });
+    if (line) lines.push(line);
+    return lines.slice(0, 4);
+  }
+
+  function grain(ctx, w, h, rand, amount) {
+    const n = Math.floor((w * h) * amount);
+    for (let i = 0; i < n; i++) {
+      const x = rand() * w, y = rand() * h;
+      const a = rand() * 0.05;
+      ctx.fillStyle = rand() > 0.5 ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  function vignette(ctx, w, h, strength) {
+    const g = ctx.createRadialGradient(w / 2, h * 0.4, h * 0.12, w / 2, h * 0.5, h * 0.75);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, `rgba(0,0,0,${strength})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  // A generic, anonymous hero silhouette — a rounded bust/shoulders shape
+  // with zero facial features and no specific likeness, just the kind of
+  // backlit figure common in minimalist poster design. Purely geometric,
+  // deterministically varied per film so posters don't feel identical.
+  function heroSilhouette(ctx, w, h, rand, tone) {
+    const cx = w / 2, shoulderY = h * (0.62 + rand() * 0.06);
+    const headR = w * (0.1 + rand() * 0.015);
+    const headY = shoulderY - headR * 2.1;
+    const shoulderW = w * (0.34 + rand() * 0.08);
+
+    ctx.save();
+    ctx.fillStyle = tone;
+    // shoulders — a soft trapezoid fading into the bottom edge
+    ctx.beginPath();
+    ctx.moveTo(cx - shoulderW * 0.5, h);
+    ctx.quadraticCurveTo(cx - shoulderW * 0.55, shoulderY, cx - shoulderW * 0.32, shoulderY - headR * 0.3);
+    ctx.quadraticCurveTo(cx, shoulderY - headR * 0.7, cx + shoulderW * 0.32, shoulderY - headR * 0.3);
+    ctx.quadraticCurveTo(cx + shoulderW * 0.55, shoulderY, cx + shoulderW * 0.5, h);
+    ctx.closePath();
+    ctx.fill();
+    // head — a plain circle, no features
+    ctx.beginPath();
+    ctx.arc(cx, headY, headR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Genre-driven abstract motif — original shapes only, never a likeness
+  // or a reproduction of anything, just an accent that varies the poster's
+  // composition by mood.
+  function motif(ctx, w, h, genre, accent, rand) {
+    const a = rgbStr(accent, 1);
+    ctx.save();
+    switch (genre) {
+      case "Action":
+      case "Thriller": {
+        ctx.globalAlpha = 0.16;
+        ctx.strokeStyle = a; ctx.lineWidth = 2 + rand() * 3;
+        for (let i = 0; i < 7; i++) {
+          const y = rand() * h;
+          ctx.beginPath(); ctx.moveTo(-20, y); ctx.lineTo(w * (0.5 + rand() * 0.6), y - h * 0.5); ctx.stroke();
+        }
+        break;
+      }
+      case "Romance": {
+        ctx.globalAlpha = 0.14;
+        for (let i = 0; i < 10; i++) {
+          const r = 10 + rand() * 34;
+          ctx.beginPath();
+          ctx.arc(rand() * w, h * 0.15 + rand() * h * 0.6, r, 0, Math.PI * 2);
+          ctx.fillStyle = a; ctx.fill();
+        }
+        break;
+      }
+      case "Musical":
+      case "Classic": {
+        ctx.globalAlpha = 0.18;
+        ctx.strokeStyle = a; ctx.lineWidth = 1.5;
+        for (let i = 0; i < 6; i++) {
+          ctx.beginPath();
+          ctx.arc(w / 2, h * 1.05, h * (0.25 + i * 0.14), Math.PI * 1.15, Math.PI * 1.85);
+          ctx.stroke();
+        }
+        break;
+      }
+      case "Fantasy": {
+        ctx.globalAlpha = 0.16;
+        for (let i = 0; i < 8; i++) {
+          const cx = rand() * w, cy = h * 0.1 + rand() * h * 0.7, s = 6 + rand() * 16;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - s); ctx.lineTo(cx + s * 0.6, cy); ctx.lineTo(cx, cy + s); ctx.lineTo(cx - s * 0.6, cy);
+          ctx.closePath();
+          ctx.fillStyle = a; ctx.fill();
+        }
+        break;
+      }
+      default: {
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = a;
+        for (let i = 0; i < 4; i++) {
+          const y = h * (0.2 + i * 0.18) + rand() * 10;
+          ctx.fillRect(0, y, w, 3 + rand() * 5);
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  // Filler nodes: unlabeled atmosphere. Not currently used (filler is set
+  // to 0 in main.js — every node is a real film) but kept available.
+  function fillerTexture(accentHex, genre) {
+    const key = "filler:" + accentHex + ":" + (genre || "x");
+    if (cache.has(key)) return cache.get(key);
+    const rand = seedFrom(key);
+    const c = document.createElement("canvas");
+    c.width = 96; c.height = 144;
+    const ctx = c.getContext("2d");
+    const accent = hexToRgb(accentHex);
+    const dark = { r: 6, g: 6, b: 8 };
+    const grad = ctx.createLinearGradient(0, 0, 0, 144);
+    grad.addColorStop(0, rgbStr(mix(accent, dark, 0.5), 1));
+    grad.addColorStop(1, rgbStr(dark, 1));
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 96, 144);
+    if (genre) motif(ctx, 96, 144, genre, accent, rand);
+    vignette(ctx, 96, 144, 0.35);
+    grain(ctx, 96, 144, rand, 0.015);
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.strokeRect(2, 2, 92, 140);
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    cache.set(key, tex);
+    return tex;
+  }
+
+  // Real, labeled film: a fuller poster composition — background gradient,
+  // genre motif, a spotlight glow with a generic hero silhouette, film
+  // grain, a genre badge, and a title/credit block. Built entirely from
+  // generated shapes and type; nothing photographic, no real likeness.
+  function filmTexture(film, accentHex) {
+    const key = "film:" + film.title + film.year;
+    if (cache.has(key)) return cache.get(key);
+    const rand = seedFrom(key);
+    const W = 320, H = 480;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const ctx = c.getContext("2d");
+
+    const accent = hexToRgb(accentHex);
+    const genreBase = hexToRgb(film.genreColor || "#333333");
+    const base = mix(accent, genreBase, 0.45);
+    const dark = { r: 4, g: 4, b: 6 };
+
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, rgbStr(mix(base, { r: 255, g: 255, b: 255 }, 0.08), 1));
+    grad.addColorStop(0.48, rgbStr(base, 1));
+    grad.addColorStop(1, rgbStr(dark, 1));
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // spotlight glow behind the figure — a soft radial highlight
+    const spot = ctx.createRadialGradient(W / 2, H * 0.42, 10, W / 2, H * 0.42, H * 0.42);
+    spot.addColorStop(0, rgbStr(mix(accent, { r: 255, g: 255, b: 255 }, 0.35), 0.55));
+    spot.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = spot;
+    ctx.fillRect(0, 0, W, H);
+
+    motif(ctx, W, H, film.genre, mix(accent, { r: 255, g: 255, b: 255 }, 0.2), rand);
+
+    // generic hero silhouette, backlit against the spotlight
+    heroSilhouette(ctx, W, H, rand, rgbStr(mix(dark, base, 0.3), 0.88));
+
+    // subtle vertical texture lines for a "printed poster" feel
+    ctx.globalAlpha = 0.05;
+    ctx.strokeStyle = "#ffffff";
+    for (let x = 12; x < W; x += 16) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+
+    vignette(ctx, W, H, 0.5);
+
+    // bottom gradient bar so title/credit text stays legible over any motif
+    const bottomFade = ctx.createLinearGradient(0, H * 0.62, 0, H);
+    bottomFade.addColorStop(0, "rgba(0,0,0,0)");
+    bottomFade.addColorStop(1, "rgba(0,0,0,0.72)");
+    ctx.fillStyle = bottomFade;
+    ctx.fillRect(0, H * 0.62, W, H * 0.38);
+
+    grain(ctx, W, H, rand, 0.01);
+
+    // top accent rule + corner mark, ties every poster back to its zone color
+    ctx.fillStyle = rgbStr(accent, 0.9);
+    ctx.fillRect(0, 0, W, 5);
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(26, 0); ctx.lineTo(0, 26); ctx.closePath();
+    ctx.fillStyle = rgbStr(accent, 0.55);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(6, 6, W - 12, H - 12);
+
+    // genre tag — small pill like a certification/genre badge
+    ctx.font = "600 13px 'IBM Plex Mono', monospace";
+    const tagText = film.genre.toUpperCase();
+    const tagWidth = ctx.measureText(tagText).width + 18;
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(18, 18, tagWidth, 24);
+    ctx.fillStyle = "rgba(255,255,255,0.88)";
+    ctx.textAlign = "left";
+    ctx.fillText(tagText, 27, 34);
+
+    // title block, with a soft drop shadow for legibility over the motif
+    ctx.textAlign = "center";
+    ctx.font = "700 32px Georgia, 'Times New Roman', serif";
+    const lines = wrapText(ctx, film.title.toUpperCase(), 272);
+    const lineHeight = 36;
+    const startY = H - 78 - lineHeight * lines.length;
+    ctx.shadowColor = "rgba(0,0,0,0.65)";
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "rgba(255,255,255,0.98)";
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, startY + i * lineHeight));
+    ctx.shadowBlur = 0;
+
+    // thin rule under the title
+    const ruleW = 46;
+    ctx.fillStyle = rgbStr(accent, 0.9);
+    ctx.fillRect(W / 2 - ruleW / 2, startY + lines.length * lineHeight + 10, ruleW, 2);
+
+    ctx.font = "400 18px Georgia, serif";
+    ctx.fillStyle = "rgba(255,255,255,0.78)";
+    ctx.fillText(film.upcoming ? "UPCOMING · " + film.year : String(film.year), W / 2, startY + lines.length * lineHeight + 34);
+
+    // small credit line at the very bottom, like a real poster's byline
+    ctx.font = "400 11px 'IBM Plex Mono', monospace";
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    const credit = [film.person, film.director && film.director !== film.person ? "dir. " + film.director : null]
+      .filter(Boolean).join("   ·   ");
+    if (credit) ctx.fillText(credit.toUpperCase(), W / 2, H - 20);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    cache.set(key, tex);
+    return tex;
+  }
+
+  window.TC.filmTexture = filmTexture;
+  window.TC.fillerTexture = fillerTexture;
+})();
+
+  </script>
+  <script>
+/* The 3D universe itself. See README.md "How the sphere is built" and
+   "Camera model" for the reasoning behind the choices below — in short:
+   a static poster field, all apparent motion driven by the camera's own
+   orbit angles, so zone detection is just "what angle is the camera at." */
+window.TC = window.TC || {};
+
+(function () {
+  const SPHERE_RADIUS = 18;
+  const CAMERA_RADIUS = 32;
+  const FOCUS_RADIUS = 7;
+  const PHI_MIN = Math.PI * 0.32;
+  const PHI_MAX = Math.PI * 0.68;
+  const PARALLAX_MAX = 0.16;   // radians of "look around" range from pointer
+  const PARALLAX_MAX_V = 0.09;
+  const IDLE_DRIFT = 0.00028;  // radians/frame baseline drift
+  const DAMPING = 0.07;
+  const DRAG_ROTATE_SPEED = 0.006;
+  const FRICTION = 0.93;
+
+  function initScene(container, opts) {
+    const reduced = () => (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) || window.__TC_FORCE_REDUCED === true;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    scene.fog = new THREE.FogExp2(0x000000, 0.014);
+
+    const camera = new THREE.PerspectiveCamera(48, container.clientWidth / container.clientHeight, 0.1, 500);
+
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2(0, 0);
+    let hasPointer = false;
+
+    let baseTheta = 0, basePhi = Math.PI / 2;
+    let currentTheta = 0, currentPhi = Math.PI / 2;
+    let dragVelTheta = 0, dragVelPhi = 0;
+    let isDown = false, isDragActuallyMoved = false, downStartedInCanvas = false;
+    let lastX = 0, lastY = 0;
+    const activePointers = new Map();
+    let pinchStartDist = null, pinchStartRadius = CAMERA_RADIUS;
+    let camRadius = CAMERA_RADIUS;
+
+    // ---- selection / focus state ----
+    let posterMeshes = [];
+    let wedges = [];
+    let focused = null;       // { mesh, node }
+    let selected = null;      // { mesh, node, returnTheta, returnPhi, returnRadius }
+    let frameCount = 0;
+
+    const SHARED_GEOMETRY = new THREE.PlaneGeometry(1, 1);
+
+    function buildField(nodes) {
+      posterMeshes.forEach(m => { scene.remove(m); m.material.dispose(); });
+      posterMeshes = [];
+
+      const spacing = SPHERE_RADIUS * Math.sqrt((4 * Math.PI) / Math.max(1, nodes.length));
+      const baseH = spacing * 0.86;
+      const baseW = baseH * (2 / 3);
+
+      const genreKeys = Object.keys(window.TC.GENRE_BASE || {});
+      nodes.forEach((node, idx) => {
+        const isFilm = node.kind === "film";
+        const ranking = opts.rankingsById[node.rankId];
+        const fillerGenre = genreKeys.length ? genreKeys[idx % genreKeys.length] : null;
+        const texture = isFilm
+          ? window.TC.filmTexture(node.film, ranking.accent)
+          : window.TC.fillerTexture(ranking.accent, fillerGenre);
+        const mat = new THREE.MeshBasicMaterial({
+          map: texture, transparent: false, side: THREE.FrontSide,
+          opacity: isFilm ? 1 : 0.82
+        });
+        const mesh = new THREE.Mesh(SHARED_GEOMETRY, mat);
+        const jitter = 0.82 + Math.random() * 0.36;
+        mesh.scale.set(baseW * jitter, baseH * jitter, 1);
+        mesh.position.set(node.position.x, node.position.y, node.position.z);
+        mesh.lookAt(0, 0, 0);
+        mesh.userData.node = node;
+        mesh.userData.baseScale = mesh.scale.clone();
+        mesh.userData.normal = mesh.position.clone().normalize();
+        mesh.userData.homePosition = mesh.position.clone();
+        scene.add(mesh);
+        posterMeshes.push(mesh);
+      });
+    }
+
+    function activeWedgeForAngle(theta) {
+      const t = ((theta % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      for (let i = 0; i < wedges.length; i++) if (t >= wedges[i].start && t < wedges[i].end) return wedges[i];
+      return wedges[wedges.length - 1];
+    }
+
+    // ---- pointer handling (unified mouse + touch via Pointer Events) ----
+    function onPointerMove(e) {
+      hasPointer = true;
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      ndc.x = (x / rect.width) * 2 - 1;
+      ndc.y = -(y / rect.height) * 2 + 1;
+      if (opts.onPointerScreen) opts.onPointerScreen(x, y);
+
+      if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (isDown && activePointers.size === 1) {
+        const dx = e.clientX - lastX, dy = e.clientY - lastY;
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) isDragActuallyMoved = true;
+        baseTheta -= dx * DRAG_ROTATE_SPEED;
+        basePhi -= dy * DRAG_ROTATE_SPEED;
+        basePhi = Math.max(PHI_MIN, Math.min(PHI_MAX, basePhi));
+        dragVelTheta = -dx * DRAG_ROTATE_SPEED;
+        dragVelPhi = -dy * DRAG_ROTATE_SPEED;
+        lastX = e.clientX; lastY = e.clientY;
+      } else if (activePointers.size === 2) {
+        const pts = Array.from(activePointers.values());
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        if (pinchStartDist == null) { pinchStartDist = dist; pinchStartRadius = camRadius; }
+        else {
+          const ratio = pinchStartDist / Math.max(1, dist);
+          camRadius = Math.max(FOCUS_RADIUS + 2, Math.min(CAMERA_RADIUS * 1.6, pinchStartRadius * ratio));
+        }
+      }
+    }
+    function onPointerDown(e) {
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      downStartedInCanvas = true;
+      if (activePointers.size === 1) { isDown = true; isDragActuallyMoved = false; lastX = e.clientX; lastY = e.clientY; dragVelTheta = 0; dragVelPhi = 0; }
+      if (activePointers.size >= 2) pinchStartDist = null;
+    }
+    function onPointerUp(e) {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size === 0) { isDown = false; pinchStartDist = null; }
+      if (downStartedInCanvas && !isDragActuallyMoved && selected == null) {
+        // treat as a tap/click -> select whatever is focused under the pointer
+        if (focused) selectNode(focused.mesh);
+        else if (opts.onEmptyClick) opts.onEmptyClick();
+      }
+      isDragActuallyMoved = false;
+      downStartedInCanvas = false;
+    }
+
+    container.style.touchAction = "none";
+    window.addEventListener("pointermove", onPointerMove);
+    container.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    window.addEventListener("keydown", e => { if (e.key === "Escape" && selected) goBack(); });
+
+    // ---- focus / select ----
+    function setFocused(mesh) {
+      if (focused && focused.mesh === mesh) return;
+      if (focused) tweenScale(focused.mesh, focused.mesh.userData.baseScale, 220);
+      if (mesh) {
+        const target = mesh.userData.baseScale.clone().multiplyScalar(1.32);
+        tweenScale(mesh, target, 220);
+        focused = { mesh, node: mesh.userData.node };
+        if (opts.onFocusChange) opts.onFocusChange(mesh.userData.node, projectToScreen(mesh.position));
+      } else {
+        focused = null;
+        if (opts.onFocusChange) opts.onFocusChange(null, null);
+      }
+    }
+
+    function selectNode(mesh) {
+      if (!mesh || mesh.userData.node.kind !== "film") return;
+      // clear hover/focus state without a competing scale tween — the
+      // select tween below takes the mesh's scale from here
+      focused = null;
+      if (opts.onFocusChange) opts.onFocusChange(null, null);
+
+      selected = {
+        mesh, node: mesh.userData.node,
+        returnTheta: baseTheta, returnPhi: basePhi, returnRadius: camRadius
+      };
+      const normal = mesh.userData.normal;
+      const outward = mesh.userData.homePosition.clone().add(normal.clone().multiplyScalar(0.9));
+      tweenVec3(mesh.position, outward, 700);
+      tweenScale(mesh, mesh.userData.baseScale.clone().multiplyScalar(2.1), 700);
+
+      const targetTheta = Math.atan2(normal.z, normal.x);
+      const rawPhi = Math.acos(Math.max(-1, Math.min(1, normal.y)));
+      const targetPhi = Math.max(PHI_MIN, Math.min(PHI_MAX, rawPhi));
+      tweenAngles(targetTheta, targetPhi, FOCUS_RADIUS, 900);
+
+      if (opts.onSelect) opts.onSelect(mesh.userData.node, computeRelated(mesh.userData.node));
+    }
+
+    function goBack() {
+      if (!selected) return;
+      const mesh = selected.mesh;
+      tweenVec3(mesh.position, mesh.userData.homePosition, 600);
+      tweenScale(mesh, mesh.userData.baseScale, 600);
+      tweenAngles(selected.returnTheta, selected.returnPhi, selected.returnRadius, 700);
+      selected = null;
+      if (opts.onDeselect) opts.onDeselect();
+    }
+
+    function computeRelated(node) {
+      if (!node.film) return [];
+      return posterMeshes
+        .map(m => m.userData.node)
+        .filter(n => n.kind === "film" && n.rankId === node.rankId && n.film.title !== node.film.title)
+        .sort((a, b) => Math.abs(a.film.year - node.film.year) - Math.abs(b.film.year - node.film.year))
+        .slice(0, 4);
+    }
+
+    // ---- tiny tween helpers (no external dep) ----
+    function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+    function tweenScale(mesh, targetVec, ms) {
+      const start = mesh.scale.clone(), t0 = performance.now();
+      const dur = reduced() ? Math.min(ms, 80) : ms;
+      (function step() {
+        const t = Math.min(1, (performance.now() - t0) / dur);
+        mesh.scale.lerpVectors(start, targetVec, easeInOutCubic(t));
+        if (t < 1) requestAnimationFrame(step);
+      })();
+    }
+    function tweenVec3(vec, targetVec, ms) {
+      const start = vec.clone(), t0 = performance.now();
+      const dur = reduced() ? Math.min(ms, 80) : ms;
+      (function step() {
+        const t = Math.min(1, (performance.now() - t0) / dur);
+        vec.lerpVectors(start, targetVec, easeInOutCubic(t));
+        if (t < 1) requestAnimationFrame(step);
+      })();
+    }
+    let angleTween = null;
+    function tweenAngles(theta, phi, radius, ms) {
+      const st = baseTheta, sp = basePhi, sr = camRadius, t0 = performance.now();
+      const dur = reduced() ? Math.min(ms, 80) : ms;
+      // shortest angular path
+      let dTheta = theta - st;
+      while (dTheta > Math.PI) dTheta -= Math.PI * 2;
+      while (dTheta < -Math.PI) dTheta += Math.PI * 2;
+      const id = {};
+      angleTween = id;
+      (function step() {
+        if (angleTween !== id) return;
+        const t = Math.min(1, (performance.now() - t0) / dur);
+        const e = easeInOutCubic(t);
+        baseTheta = st + dTheta * e;
+        basePhi = sp + (phi - sp) * e;
+        camRadius = sr + (radius - sr) * e;
+        if (t < 1) requestAnimationFrame(step);
+      })();
+    }
+
+    function projectToScreen(pos) {
+      const v = pos.clone().project(camera);
+      const rect = container.getBoundingClientRect();
+      return { x: (v.x * 0.5 + 0.5) * rect.width, y: (-v.y * 0.5 + 0.5) * rect.height };
+    }
+
+    // ---- main loop ----
+    function tick() {
+      frameCount++;
+      if (!isDown) {
+        if (!reduced()) baseTheta += IDLE_DRIFT;
+        baseTheta += dragVelTheta; basePhi += dragVelPhi;
+        dragVelTheta *= FRICTION; dragVelPhi *= FRICTION;
+        basePhi = Math.max(PHI_MIN, Math.min(PHI_MAX, basePhi));
+      }
+
+      let targetTheta = baseTheta, targetPhi = basePhi;
+      if (hasPointer && !isDown && activePointers.size < 2 && !selected) {
+        targetTheta += ndc.x * PARALLAX_MAX;
+        targetPhi -= ndc.y * PARALLAX_MAX_V;
+      }
+      currentTheta += (targetTheta - currentTheta) * DAMPING;
+      currentPhi += (targetPhi - currentPhi) * DAMPING;
+
+      camera.position.set(
+        camRadius * Math.sin(currentPhi) * Math.cos(currentTheta),
+        camRadius * Math.cos(currentPhi),
+        camRadius * Math.sin(currentPhi) * Math.sin(currentTheta)
+      );
+      camera.lookAt(0, 0, 0);
+
+      if (frameCount % 3 === 0 && !selected && hasPointer) {
+        raycaster.setFromCamera(ndc, camera);
+        const hits = raycaster.intersectObjects(posterMeshes);
+        setFocused(hits.length ? hits[0].object : null);
+      }
+
+      if (opts.onZoneSample) opts.onZoneSample(activeWedgeForAngle(baseTheta));
+
+      renderer.render(scene, camera);
+    }
+
+    function resize() {
+      const w = container.clientWidth, h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener("resize", resize);
+
+    renderer.setAnimationLoop(tick);
+
+    return {
+      setField(nodes, wedgeList) { wedges = wedgeList; buildField(nodes); },
+      resize,
+      goBack,
+      isSelected: () => !!selected,
+      setInitialAngle(theta) { baseTheta = theta; currentTheta = theta; }
+    };
+  }
+
+  window.TC.initScene = initScene;
+})();
+
+  </script>
+  <script>
+/* Boot + DOM wiring. Everything spatial/interactive lives in js/scene.js;
+   this file only connects its callbacks to the chrome defined in
+   index.html + css/style.css, and runs the loading sequence. */
+(function () {
+  const TC = window.TC;
+  const rankingsById = {};
+  TC.RANKINGS.forEach(r => (rankingsById[r.id] = r));
+
+  const container = document.getElementById("canvas-container");
+
+  const cursorDot = document.getElementById("cursor-dot");
+  const cursorRing = document.getElementById("cursor-ring");
+  const zoneLabel = document.getElementById("zone-label");
+  const zoneName = zoneLabel.querySelector(".name");
+  const zoneTe = zoneLabel.querySelector(".te");
+  const focusInfo = document.getElementById("focus-info");
+  const focusTitle = focusInfo.querySelector(".t");
+  const focusMeta = focusInfo.querySelector(".m");
+  const exploreHint = document.getElementById("explore-hint");
+  const loader = document.getElementById("loader");
+  const loaderStatus = document.getElementById("loader-status");
+  const loaderBar = document.getElementById("loader-bar");
+  const scrim = document.getElementById("scrim");
+  const detail = document.getElementById("detail");
+  const detailTitle = document.getElementById("detail-title");
+  const detailMeta = document.getElementById("detail-meta");
+  const detailDesc = document.getElementById("detail-desc");
+  const detailRelated = document.getElementById("detail-related");
+  const settingsToggle = document.getElementById("settings-toggle");
+  const settingsPanel = document.getElementById("settings-panel");
+
+  // ---- device/pointer capability classes (drives cursor visibility in CSS) ----
+  const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  document.body.classList.toggle("touch-device", isTouch);
+  if (window.matchMedia && window.matchMedia("(pointer: fine)").matches) {
+    document.body.classList.add("has-fine-pointer");
+  }
+
+  // ---- scene ----
+  let lastRankId = null;
+  let scene;
+  try {
+    scene = window.TC.initScene(container, {
+    rankingsById,
+    onPointerScreen(x, y) {
+      cursorDot.style.transform = `translate(${x}px, ${y}px) translate(-50%,-50%)`;
+      cursorRing.style.transform = `translate(${x}px, ${y}px) translate(-50%,-50%)`;
+    },
+    onFocusChange(node, screenPos) {
+      if (!node || !screenPos) {
+        cursorRing.classList.remove("hover");
+        focusInfo.classList.remove("visible");
+        return;
+      }
+      cursorRing.classList.toggle("hover", node.kind === "film");
+      if (node.kind !== "film") { focusInfo.classList.remove("visible"); return; }
+      const f = node.film;
+      focusTitle.textContent = f.title;
+      focusMeta.textContent = (f.upcoming ? "Upcoming " + f.year : f.year) + (f.person ? " · " + f.person : "");
+      focusInfo.style.left = screenPos.x + "px";
+      focusInfo.style.top = screenPos.y + "px";
+      focusInfo.classList.add("visible");
+    },
+    onZoneSample(wedge) {
+      if (!wedge || wedge.rankId === lastRankId) return;
+      lastRankId = wedge.rankId;
+      const r = rankingsById[wedge.rankId];
+      zoneName.style.opacity = 0;
+      setTimeout(() => {
+        zoneName.textContent = r.name;
+        zoneTe.textContent = r.telugu || "";
+        zoneName.style.opacity = 1;
+      }, 160);
+    },
+    onSelect(node, related) {
+      const f = node.film;
+      detailTitle.textContent = f.title;
+      const bits = [f.upcoming ? "Upcoming — " + f.year : String(f.year)];
+      if (f.person) bits.push(f.person);
+      if (f.director && f.director !== f.person) bits.push("dir. " + f.director);
+      bits.push(f.genre);
+      detailMeta.textContent = bits.join(" · ");
+      detailDesc.textContent = `A ${f.genre.toLowerCase()} film${f.person ? " starring " + f.person : ""}${f.upcoming ? ". Not yet released." : "."}`;
+      detailRelated.innerHTML = "";
+      related.forEach(n => {
+        const span = document.createElement("span");
+        span.textContent = n.film.title + " (" + n.film.year + ")";
+        detailRelated.appendChild(span);
+      });
+      scrim.classList.add("open");
+      detail.classList.add("open");
+    },
+    onDeselect() {
+      scrim.classList.remove("open");
+      detail.classList.remove("open");
+    },
+    onEmptyClick() {
+      if (settingsPanel.classList.contains("open")) closeSettings();
+    }
+  });
+  } catch (err) {
+    loaderStatus.textContent = "Couldn't start (needs internet access for the 3D engine)";
+    loaderBar.style.width = "100%";
+    console.error(err);
+    return;
+  }
+
+  detail.querySelector(".back").addEventListener("click", () => scene.goBack());
+  scrim.addEventListener("click", () => scene.goBack());
+
+  // ---- settings panel ----
+  function closeSettings() { settingsPanel.classList.remove("open"); settingsToggle.setAttribute("aria-expanded", "false"); }
+  settingsToggle.addEventListener("click", () => {
+    const open = !settingsPanel.classList.contains("open");
+    settingsPanel.classList.toggle("open", open);
+    settingsToggle.setAttribute("aria-expanded", String(open));
+  });
+  settingsPanel.querySelectorAll("[data-motion]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      settingsPanel.querySelectorAll("[data-motion]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      window.__TC_FORCE_REDUCED = btn.dataset.motion === "calm";
+    });
+  });
+  settingsPanel.querySelectorAll("[data-cursor]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      settingsPanel.querySelectorAll("[data-cursor]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const on = btn.dataset.cursor === "on";
+      document.body.classList.toggle("has-fine-pointer", on && !isTouch);
+      cursorDot.style.display = on ? "" : "none";
+      cursorRing.style.display = on ? "" : "none";
+    });
+  });
+
+  // ---- explore hint: fade once the user does anything ----
+  let hintShown = true;
+  function dismissHint() {
+    if (!hintShown) return;
+    hintShown = false;
+    exploreHint.classList.add("hidden");
+  }
+  container.addEventListener("pointerdown", dismissHint, { once: true });
+  setTimeout(dismissHint, 7000);
+
+  // ---- loading sequence ----
+  const STEPS = [
+    "Assembling the archive…",
+    "Placing " + TC.FILMS.length + " films…",
+    "Forming the ranking zones…",
+    "Calibrating the camera…"
+  ];
+  let step = 0;
+  function advanceLoader() {
+    loaderStatus.textContent = STEPS[step];
+    loaderBar.style.width = Math.round(((step + 1) / (STEPS.length + 1)) * 100) + "%";
+    step++;
+    if (step < STEPS.length) {
+      setTimeout(advanceLoader, 340);
+    } else {
+      // do the actual (synchronous, real) work here, not a fake delay
+      const built = TC.buildLayout({
+        rankings: TC.RANKINGS, films: TC.FILMS,
+        radius: 18, fillerTotal: 0, restBoostFactor: 3
+      });
+      scene.setField(built.nodes, built.wedges);
+      const firstWedge = built.wedges[0];
+      scene.setInitialAngle((firstWedge.start + firstWedge.end) / 2);
+
+      loaderBar.style.width = "100%";
+      loaderStatus.textContent = "READY";
+      setTimeout(() => loader.classList.add("fade-out"), 380);
+    }
+  }
+  advanceLoader();
+})();
+
+  </script>
+</body>
+</html>
